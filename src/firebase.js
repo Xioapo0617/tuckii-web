@@ -8,7 +8,7 @@ import { getFirestore } from "firebase/firestore";
 // Your web app's Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyAxjPtvDmpz705uSZyjEZsHLZ-PJTrGC2I",
-  authDomain: "tuckii-web.vercel.app",
+  authDomain: "tuckii-bookmark.firebaseapp.com",
   projectId: "tuckii-bookmark",
   storageBucket: "tuckii-bookmark.firebasestorage.app",
   messagingSenderId: "896731196164",
