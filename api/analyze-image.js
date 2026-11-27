@@ -45,16 +45,9 @@ export default async function handler(req, res) {
       '只回傳合法的 JSON 物件，不要包含任何額外說明。',
     ].join('\n')
 
-    const headers = { 'Content-Type': 'application/json' }
-    if (apiKey.startsWith('AQ.')) {
-      headers['Authorization'] = `Bearer ${apiKey}`
-    } else {
-      headers['x-goog-api-key'] = apiKey
-    }
-
-    const response = await fetch(GEMINI_ENDPOINT, {
+    const response = await fetch(`${GEMINI_ENDPOINT}?key=${encodeURIComponent(apiKey)}`, {
       method: 'POST',
-      headers,
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [
           {
