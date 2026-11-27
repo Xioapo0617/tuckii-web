@@ -51,7 +51,7 @@ function faviconUrl(url) {
 
 export default function App() {
   const [user, setUser] = useState(null)
-  const [authReady, setAuthReady] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [categories, setCategories] = useState([])
   const [bookmarks, setBookmarks] = useState([])
   const [dataReady, setDataReady] = useState(false)
@@ -89,22 +89,38 @@ export default function App() {
 
   // ---- 登入狀態與 Redirect 結果處理 ----
   useEffect(() => {
+    const fallbackTimer = window.setTimeout(() => {
+      setLoading(false)
+    }, 3000)
+
     getRedirectResult(auth).catch((err) => {
       console.error('Google redirect sign-in error:', err)
       alert(err.code + ': ' + err.message)
       showToast('登入失敗，請再試一次')
+      setLoading(false)
     })
 
-    const unsub = onAuthStateChanged(auth, (u) => {
-      setUser(u)
-      setAuthReady(true)
-      if (!u) {
-        setCategories([])
-        setBookmarks([])
-        setDataReady(false)
+    const unsub = onAuthStateChanged(
+      auth,
+      (u) => {
+        setUser(u)
+        setLoading(false)
+        if (!u) {
+          setCategories([])
+          setBookmarks([])
+          setDataReady(false)
+        }
+      },
+      (err) => {
+        console.error('Auth state error:', err)
+        setLoading(false)
       }
-    })
-    return unsub
+    )
+
+    return () => {
+      window.clearTimeout(fallbackTimer)
+      unsub()
+    }
   }, [])
 
   const handleGoogleSignIn = async () => {
@@ -123,16 +139,37 @@ export default function App() {
   // ---- Firestore 訂閱（只讀寫自己的資料）----
   useEffect(() => {
     if (!user) return
+    const fallbackTimer = window.setTimeout(() => {
+      setLoading(false)
+    }, 3000)
     const catQ = query(collection(db, 'users', user.uid, 'categories'), orderBy('createdAt', 'asc'))
     const bmQ = query(collection(db, 'users', user.uid, 'bookmarks'), orderBy('createdAt', 'desc'))
-    const unsubCat = onSnapshot(catQ, (snap) => {
-      setCategories(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
-      setDataReady(true)
-    })
-    const unsubBm = onSnapshot(bmQ, (snap) => {
-      setBookmarks(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
-    })
+    const unsubCat = onSnapshot(
+      catQ,
+      (snap) => {
+        setCategories(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+        setDataReady(true)
+        setLoading(false)
+      },
+      (err) => {
+        console.error('Categories snapshot error:', err)
+        setDataReady(true)
+        setLoading(false)
+      }
+    )
+    const unsubBm = onSnapshot(
+      bmQ,
+      (snap) => {
+        setBookmarks(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+        setLoading(false)
+      },
+      (err) => {
+        console.error('Bookmarks snapshot error:', err)
+        setLoading(false)
+      }
+    )
     return () => {
+      window.clearTimeout(fallbackTimer)
       unsubCat()
       unsubBm()
     }
@@ -142,18 +179,24 @@ export default function App() {
   useEffect(() => {
     if (!user || !dataReady) return
     ;(async () => {
-      const metaRef = doc(db, 'users', user.uid)
-      const metaSnap = await getDoc(metaRef)
-      if (metaSnap.exists() && metaSnap.data().initialized) return
-      if (categories.length === 0) {
-        const batch = writeBatch(db)
-        DEFAULT_CATEGORIES.forEach((name, i) => {
-          const ref = doc(collection(db, 'users', user.uid, 'categories'))
-          batch.set(ref, { name, color: CATEGORY_COLORS[i % CATEGORY_COLORS.length], createdAt: serverTimestamp() })
-        })
-        await batch.commit()
+      try {
+        const metaRef = doc(db, 'users', user.uid)
+        const metaSnap = await getDoc(metaRef)
+        if (metaSnap.exists() && metaSnap.data().initialized) return
+        if (categories.length === 0) {
+          const batch = writeBatch(db)
+          DEFAULT_CATEGORIES.forEach((name, i) => {
+            const ref = doc(collection(db, 'users', user.uid, 'categories'))
+            batch.set(ref, { name, color: CATEGORY_COLORS[i % CATEGORY_COLORS.length], createdAt: serverTimestamp() })
+          })
+          await batch.commit()
+        }
+        await setDoc(metaRef, { initialized: true }, { merge: true })
+      } catch (err) {
+        console.error('Initialize default categories error:', err)
+      } finally {
+        setLoading(false)
       }
-      await setDoc(metaRef, { initialized: true }, { merge: true })
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, dataReady])
@@ -413,7 +456,7 @@ export default function App() {
 
   // ---------- 畫面 ----------
 
-  if (!authReady) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-paper flex items-center justify-center">
         <p className="text-ink/60 text-sm">載入中…</p>
