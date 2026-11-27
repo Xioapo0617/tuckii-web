@@ -1,5 +1,6 @@
-const GEMINI_ENDPOINT =
-  'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent'
+const MODELS = ['gemini-3.8-flash', 'gemini-2.5-flash-lite', 'gemini-3.8-flash-lite']
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 function stripCodeFences(text) {
   return text
@@ -45,38 +46,63 @@ export default async function handler(req, res) {
       '只回傳合法的 JSON 物件，不要包含任何額外說明。',
     ].join('\n')
 
-    const response = await fetch(`${GEMINI_ENDPOINT}?key=${encodeURIComponent(apiKey)}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              { text: prompt },
-              {
-                inlineData: {
-                  mimeType,
-                  data: imageBase64,
-                },
+    const requestBody = JSON.stringify({
+      contents: [
+        {
+          parts: [
+            { text: prompt },
+            {
+              inlineData: {
+                mimeType,
+                data: imageBase64,
               },
-            ],
-          },
-        ],
-        generationConfig: {
-          temperature: 0.2,
-          responseMimeType: 'application/json',
+            },
+          ],
         },
-      }),
+      ],
+      generationConfig: {
+        temperature: 0.2,
+        responseMimeType: 'application/json',
+      },
     })
 
-    if (!response.ok) {
+    let data = null
+    let lastError = 'Unknown error'
+
+    for (let i = 0; i < MODELS.length; i++) {
+      const model = MODELS[i]
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: requestBody,
+      })
+
+      if (response.ok) {
+        data = await response.json()
+        break
+      }
+
       const errData = await response.json().catch(() => ({}))
       const errMsg = errData.error?.message || 'Unknown error'
-      console.error('Gemini API error:', response.status, errMsg)
-      return res.status(502).json({ error: errMsg })
+      lastError = errMsg
+      console.error(`Gemini API error (${model}):`, response.status, errMsg)
+
+      const isHighDemand = response.status === 503 || /high demand/i.test(errMsg)
+      if (!isHighDemand) {
+        break
+      }
+
+      if (i < MODELS.length - 1) {
+        await sleep(1000)
+      }
     }
 
-    const data = await response.json()
+    if (!data) {
+      return res.status(502).json({ error: lastError })
+    }
+
     const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || ''
     const parsed = JSON.parse(stripCodeFences(rawText))
 
