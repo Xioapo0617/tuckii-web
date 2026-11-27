@@ -91,6 +91,7 @@ export default function App() {
   useEffect(() => {
     getRedirectResult(auth).catch((err) => {
       console.error('Google redirect sign-in error:', err)
+      alert(err.code + ': ' + err.message)
       showToast('登入失敗，請再試一次')
     })
 
