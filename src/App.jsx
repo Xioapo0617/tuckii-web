@@ -3,7 +3,6 @@ import {
   getRedirectResult,
   onAuthStateChanged,
   signInWithPopup,
-  signInWithRedirect,
   signOut
 } from 'firebase/auth'
 import {
@@ -126,13 +125,10 @@ export default function App() {
   const handleGoogleSignIn = async () => {
     try {
       await signInWithPopup(auth, googleProvider)
-    } catch (err) {
-      if (err?.code === 'auth/popup-blocked') {
-        await signInWithRedirect(auth, googleProvider)
-      } else if (err?.code !== 'auth/popup-closed-by-user' && err?.code !== 'auth/cancelled-popup-request') {
-        console.error('Google sign-in error:', err)
-        showToast('登入失敗，請再試一次')
-      }
+    } catch (error) {
+      console.error('Google sign-in error:', error)
+      alert(error.code + ': ' + error.message)
+      showToast('登入失敗，請再試一次')
     }
   }
 
