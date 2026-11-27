@@ -262,7 +262,10 @@ export default function App() {
             categories: currentCats.map((c) => c.name)
           })
         })
-        if (!res.ok) throw new Error('AI analyze failed')
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}))
+          throw new Error(errData.error || `AI analyze failed (${res.status})`)
+        }
         const ai = await res.json()
 
         setSaveModal((prev) => {
@@ -278,7 +281,9 @@ export default function App() {
             analyzing: false
           }
         })
-      } catch {
+      } catch (err) {
+        console.error('AI analyze error:', err)
+        alert('AI 分析失敗：' + (err?.message || 'Unknown error'))
         setSaveModal((prev) =>
           prev && prev.imagePreviewUrl === previewUrl ? { ...prev, analyzing: false } : prev
         )

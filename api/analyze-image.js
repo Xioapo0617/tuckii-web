@@ -45,9 +45,16 @@ export default async function handler(req, res) {
       '只回傳合法的 JSON 物件，不要包含任何額外說明。',
     ].join('\n')
 
-    const response = await fetch(`${GEMINI_ENDPOINT}?key=${encodeURIComponent(apiKey)}`, {
+    const headers = { 'Content-Type': 'application/json' }
+    if (apiKey.startsWith('AQ.')) {
+      headers['Authorization'] = `Bearer ${apiKey}`
+    } else {
+      headers['x-goog-api-key'] = apiKey
+    }
+
+    const response = await fetch(GEMINI_ENDPOINT, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
         contents: [
           {
@@ -70,9 +77,10 @@ export default async function handler(req, res) {
     })
 
     if (!response.ok) {
-      const errText = await response.text()
-      console.error('Gemini API error:', response.status, errText)
-      return res.status(502).json({ error: 'Gemini API request failed' })
+      const errData = await response.json().catch(() => ({}))
+      const errMsg = errData.error?.message || 'Unknown error'
+      console.error('Gemini API error:', response.status, errMsg)
+      return res.status(502).json({ error: errMsg })
     }
 
     const data = await response.json()
