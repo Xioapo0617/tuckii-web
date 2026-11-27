@@ -4,11 +4,12 @@
 
 html {
   -webkit-tap-highlight-color: transparent;
+  color-scheme: dark;
 }
 
 body {
-  background-color: #F7F4EE;
-  color: #1A1A1A;
+  background-color: #12101A;
+  color: #F4F1FA;
 }
 
 /* Hide scrollbars on the horizontal category strip while keeping it scrollable */

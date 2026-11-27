@@ -22,7 +22,7 @@ import { auth, db, googleProvider } from './firebase'
 import { compressImageToWebP } from './utils/image'
 
 const DEFAULT_CATEGORIES = ['口袋名單', '靈感', '學習筆記', '旅行計畫']
-const CATEGORY_COLORS = ['#1F6FEB', '#F59E0B', '#10B981', '#EC4899', '#8B5CF6', '#F97316', '#14B8A6', '#6366F1']
+const CATEGORY_COLORS = ['#8B5CF6', '#F59E0B', '#10B981', '#EC4899', '#38BDF8', '#F97316', '#14B8A6', '#6366F1']
 
 function normalizeUrl(raw) {
   const trimmed = (raw || '').trim()
@@ -448,14 +448,14 @@ export default function App() {
   }, [bookmarks, keyword, selectedCategory])
 
   const categoryName = (id) => categories.find((c) => c.id === id)?.name || '未分類'
-  const categoryColor = (id) => categories.find((c) => c.id === id)?.color || '#9CA3AF'
+  const categoryColor = (id) => categories.find((c) => c.id === id)?.color || '#6B7280'
 
   // ---------- 畫面 ----------
 
   if (loading) {
     return (
       <div className="min-h-screen bg-paper flex items-center justify-center">
-        <p className="text-ink/60 text-sm">載入中…</p>
+        <p className="text-white/50 text-sm">載入中…</p>
       </div>
     )
   }
@@ -466,11 +466,11 @@ export default function App() {
         <div className="w-20 h-20 rounded-3xl bg-brand flex items-center justify-center shadow-card mb-5">
           <svg viewBox="0 0 64 64" className="w-10 h-10"><path d="M22 10h20a2 2 0 0 1 2 2v42l-12-8-12 8V12a2 2 0 0 1 2-2z" fill="#fff" /></svg>
         </div>
-        <h1 className="text-2xl font-bold text-ink mb-2">Tuckii 書籤</h1>
-        <p className="text-ink/60 text-sm mb-8 text-center">貼上網址，一鍵收藏，分類整理你的口袋名單。</p>
+        <h1 className="text-2xl font-bold text-white mb-2">Tuckii 書籤</h1>
+        <p className="text-white/50 text-sm mb-8 text-center">貼上網址，一鍵收藏，分類整理你的口袋名單。</p>
         <button
           onClick={handleGoogleSignIn}
-          className="bg-white text-ink font-medium px-6 py-3 rounded-full shadow-card border border-black/5 active:scale-95 transition"
+          className="bg-white text-[#1A1A1A] font-medium px-6 py-3 rounded-full shadow-card active:scale-95 transition"
         >
           使用 Google 帳號登入
         </button>
@@ -479,7 +479,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-paper text-ink">
+    <div className="min-h-screen bg-paper text-white">
       <div className="max-w-lg mx-auto px-4 pb-24">
         {/* 頂部列 */}
         <header className="flex items-center justify-between pt-5 pb-3">
@@ -487,16 +487,16 @@ export default function App() {
             <div className="w-8 h-8 rounded-xl bg-brand flex items-center justify-center">
               <svg viewBox="0 0 64 64" className="w-4 h-4"><path d="M22 10h20a2 2 0 0 1 2 2v42l-12-8-12 8V12a2 2 0 0 1 2-2z" fill="#fff" /></svg>
             </div>
-            <span className="font-bold text-lg">Tuckii 書籤</span>
+            <span className="font-bold text-lg text-white">Tuckii 書籤</span>
           </div>
           <div className="flex items-center gap-2">
-            {user.photoURL && <img src={user.photoURL} alt="" className="w-8 h-8 rounded-full" />}
-            <button onClick={() => signOut(auth)} className="text-sm text-ink/60 px-2 py-1">登出</button>
+            {user.photoURL && <img src={user.photoURL} alt="" className="w-8 h-8 rounded-full border border-white/10" />}
+            <button onClick={() => signOut(auth)} className="text-sm text-white/50 hover:text-white px-2 py-1 transition">登出</button>
           </div>
         </header>
 
         {/* 一鍵貼上並儲存 */}
-        <div className="bg-white rounded-3xl shadow-card p-3 mb-3">
+        <div className="bg-card border border-white/10 rounded-3xl shadow-card p-3 mb-3">
           <div className="flex gap-2">
             <input
               ref={urlInputRef}
@@ -505,11 +505,11 @@ export default function App() {
               onKeyDown={(e) => { if (e.key === 'Enter' && urlInput.trim()) openSaveModal(urlInput) }}
               placeholder="貼上網址…"
               inputMode="url"
-              className="flex-1 min-w-0 bg-paper rounded-2xl px-4 py-3 text-sm outline-none placeholder:text-ink/40"
+              className="flex-1 min-w-0 bg-paper border border-white/10 rounded-2xl px-4 py-3 text-sm outline-none placeholder:text-white/35 text-white"
             />
             <button
               onClick={() => { if (urlInput.trim()) openSaveModal(urlInput) }}
-              className="shrink-0 bg-ink text-white text-sm font-medium px-4 rounded-2xl active:scale-95 transition"
+              className="shrink-0 bg-white/10 border border-white/10 text-white text-sm font-medium px-4 rounded-2xl active:scale-95 transition"
             >
               儲存
             </button>
@@ -523,7 +523,7 @@ export default function App() {
             </button>
             <button
               onClick={() => imageInputRef.current?.click()}
-              className="bg-paper text-ink font-semibold py-3 rounded-2xl active:scale-[0.98] transition text-sm border border-black/5"
+              className="bg-white/5 border border-white/10 text-white font-semibold py-3 rounded-2xl active:scale-[0.98] transition text-sm"
             >
               🖼️ 上傳圖片 / 截圖
             </button>
@@ -539,49 +539,77 @@ export default function App() {
               e.target.value = ''
             }}
           />
-          <p className="text-[11px] text-ink/40 text-center mt-2">支援直接按 Ctrl+V 貼上剪貼簿圖片</p>
+          <p className="text-[11px] text-white/35 text-center mt-2">支援直接按 Ctrl+V 貼上剪貼簿圖片</p>
         </div>
 
         {/* 搜尋 */}
-        <div className="bg-white rounded-full shadow-card px-4 py-2.5 mb-4 flex items-center gap-2">
-          <span className="text-ink/40">🔍</span>
+        <div className="bg-card border border-white/10 rounded-full shadow-card px-4 py-2.5 mb-3 flex items-center gap-2">
+          <span className="text-white/40">🔍</span>
           <input
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             placeholder="搜尋標題、網址或備註…"
-            className="flex-1 min-w-0 bg-transparent text-sm outline-none placeholder:text-ink/40"
+            className="flex-1 min-w-0 bg-transparent text-sm outline-none placeholder:text-white/35 text-white"
           />
           {keyword && (
-            <button onClick={() => setKeyword('')} className="text-ink/40 text-sm px-1">✕</button>
+            <button onClick={() => setKeyword('')} className="text-white/40 text-sm px-1">✕</button>
+          )}
+        </div>
+
+        {/* 分類快速篩選 */}
+        <div className="flex gap-2 overflow-x-auto no-scrollbar mb-4 -mx-4 px-4">
+          <button
+            onClick={() => setSelectedCategory('all')}
+            className={`shrink-0 px-4 py-2 rounded-full text-sm font-medium transition ${selectedCategory === 'all' ? 'bg-brand text-white' : 'bg-card border border-white/10 text-white/70'}`}
+          >
+            全部
+          </button>
+          {categories.map((cat) => (
+            <button
+              key={cat.id}
+              onClick={() => setSelectedCategory(cat.id)}
+              className={`shrink-0 px-4 py-2 rounded-full text-sm font-medium transition ${selectedCategory === cat.id ? 'text-white' : 'bg-card border border-white/10 text-white/70'}`}
+              style={selectedCategory === cat.id ? { backgroundColor: cat.color || '#8B5CF6' } : {}}
+            >
+              {cat.name}
+            </button>
+          ))}
+          {(countByCategory['uncategorized'] || 0) > 0 && (
+            <button
+              onClick={() => setSelectedCategory('uncategorized')}
+              className={`shrink-0 px-4 py-2 rounded-full text-sm font-medium transition ${selectedCategory === 'uncategorized' ? 'bg-brand text-white' : 'bg-card border border-white/10 text-white/70'}`}
+            >
+              未分類
+            </button>
           )}
         </div>
 
         {/* 分類資料夾卡片 */}
         <div className="flex items-center justify-between mb-2 px-1">
-          <h2 className="font-semibold text-sm text-ink/70">我的分類</h2>
-          <button onClick={() => setCategoryModal(true)} className="text-brand text-sm font-medium">＋ 新增分類</button>
+          <h2 className="font-semibold text-sm text-white/60">我的分類</h2>
+          <button onClick={() => setCategoryModal(true)} className="text-sm font-medium" style={{ color: '#A78BFA' }}>＋ 新增分類</button>
         </div>
         <div className="grid grid-cols-2 gap-3 mb-5">
           <button
             onClick={() => setSelectedCategory('all')}
-            className={`text-left bg-white rounded-3xl shadow-card p-4 active:scale-[0.98] transition ${selectedCategory === 'all' ? 'ring-2 ring-brand' : ''}`}
+            className={`text-left bg-card border border-white/10 rounded-3xl shadow-card p-4 active:scale-[0.98] transition ${selectedCategory === 'all' ? 'ring-2 ring-brand' : ''}`}
           >
             <div className="text-2xl mb-1">🗂️</div>
-            <div className="font-semibold">全部書籤</div>
-            <div className="text-xs text-ink/50">{bookmarks.length} 則</div>
+            <div className="font-semibold text-white">全部書籤</div>
+            <div className="text-xs text-white/45">{bookmarks.length} 則</div>
           </button>
           {categories.map((cat) => (
             <div
               key={cat.id}
               onClick={() => setSelectedCategory(cat.id)}
-              className={`relative text-left bg-white rounded-3xl shadow-card p-4 cursor-pointer active:scale-[0.98] transition ${selectedCategory === cat.id ? 'ring-2 ring-brand' : ''}`}
+              className={`relative text-left bg-card border border-white/10 rounded-3xl shadow-card p-4 cursor-pointer active:scale-[0.98] transition ${selectedCategory === cat.id ? 'ring-2 ring-brand' : ''}`}
             >
-              <div className="w-8 h-8 rounded-xl mb-1 flex items-center justify-center text-lg" style={{ backgroundColor: (cat.color || '#1F6FEB') + '22' }}>📁</div>
-              <div className="font-semibold pr-5">{cat.name}</div>
-              <div className="text-xs text-ink/50">{countByCategory[cat.id] || 0} 則</div>
+              <div className="w-8 h-8 rounded-xl mb-1 flex items-center justify-center text-lg" style={{ backgroundColor: (cat.color || '#8B5CF6') + '2E' }}>📁</div>
+              <div className="font-semibold text-white pr-5">{cat.name}</div>
+              <div className="text-xs text-white/45">{countByCategory[cat.id] || 0} 則</div>
               <button
                 onClick={(e) => { e.stopPropagation(); handleDeleteCategory(cat) }}
-                className="absolute top-3 right-3 text-ink/30 hover:text-red-500 text-sm px-1"
+                className="absolute top-3 right-3 text-white/30 hover:text-red-400 text-sm px-1"
                 aria-label={`刪除分類 ${cat.name}`}
               >
                 ✕
@@ -591,28 +619,28 @@ export default function App() {
           {(countByCategory['uncategorized'] || 0) > 0 && (
             <button
               onClick={() => setSelectedCategory('uncategorized')}
-              className={`text-left bg-white rounded-3xl shadow-card p-4 active:scale-[0.98] transition ${selectedCategory === 'uncategorized' ? 'ring-2 ring-brand' : ''}`}
+              className={`text-left bg-card border border-white/10 rounded-3xl shadow-card p-4 active:scale-[0.98] transition ${selectedCategory === 'uncategorized' ? 'ring-2 ring-brand' : ''}`}
             >
               <div className="text-2xl mb-1">📥</div>
-              <div className="font-semibold">未分類</div>
-              <div className="text-xs text-ink/50">{countByCategory['uncategorized']} 則</div>
+              <div className="font-semibold text-white">未分類</div>
+              <div className="text-xs text-white/45">{countByCategory['uncategorized']} 則</div>
             </button>
           )}
         </div>
 
         {/* 書籤清單 */}
-        <h2 className="font-semibold text-sm text-ink/70 mb-2 px-1">
+        <h2 className="font-semibold text-sm text-white/60 mb-2 px-1">
           {selectedCategory === 'all' ? '全部書籤' : selectedCategory === 'uncategorized' ? '未分類' : categoryName(selectedCategory)}
-          <span className="text-ink/40 font-normal"> ・ {visibleBookmarks.length} 則</span>
+          <span className="text-white/35 font-normal"> ・ {visibleBookmarks.length} 則</span>
         </h2>
         {visibleBookmarks.length === 0 ? (
-          <div className="bg-white rounded-3xl shadow-card p-8 text-center text-ink/40 text-sm">
+          <div className="bg-card border border-white/10 rounded-3xl shadow-card p-8 text-center text-white/40 text-sm">
             {keyword ? '沒有符合搜尋的書籤' : '還沒有書籤，貼上網址收藏第一則吧'}
           </div>
         ) : (
           <div className="space-y-3">
             {visibleBookmarks.map((b) => (
-              <div key={b.id} className="bg-white rounded-3xl shadow-card p-4">
+              <div key={b.id} className="bg-card border border-white/10 rounded-3xl shadow-card p-4">
                 {b.type === 'image' && b.imageUrl ? (
                   <div>
                     <a href={b.imageUrl} target="_blank" rel="noreferrer" className="block mb-3">
@@ -620,37 +648,37 @@ export default function App() {
                         src={b.imageUrl}
                         alt={b.title || '圖片書籤'}
                         loading="lazy"
-                        className="w-full max-h-64 object-cover rounded-2xl bg-paper"
+                        className="w-full max-h-64 object-cover rounded-2xl bg-paper border border-white/5"
                       />
                     </a>
                     <div className="flex items-start gap-3">
                       <div className="flex-1 min-w-0">
-                        <a href={b.imageUrl} target="_blank" rel="noreferrer" className="font-semibold leading-snug block truncate">{b.title || '圖片書籤'}</a>
-                        {b.note && <p className="text-sm text-ink/60 mt-1.5 whitespace-pre-wrap">{b.note}</p>}
+                        <a href={b.imageUrl} target="_blank" rel="noreferrer" className="font-semibold leading-snug block truncate text-white">{b.title || '圖片書籤'}</a>
+                        {b.note && <p className="text-sm text-white/60 mt-1.5 whitespace-pre-wrap">{b.note}</p>}
                         <div className="mt-2 flex items-center gap-2">
                           <span className="text-[11px] px-2 py-0.5 rounded-full text-white" style={{ backgroundColor: categoryColor(b.categoryId) }}>
                             {categoryName(b.categoryId)}
                           </span>
-                          <span className="text-[11px] px-2 py-0.5 rounded-full bg-paper text-ink/60">🖼️ 圖片</span>
+                          <span className="text-[11px] px-2 py-0.5 rounded-full bg-white/10 text-white/70">🖼️ 圖片</span>
                         </div>
                       </div>
-                      <button onClick={() => handleDeleteBookmark(b.id)} className="text-ink/30 hover:text-red-500 text-sm px-1" aria-label="刪除書籤">✕</button>
+                      <button onClick={() => handleDeleteBookmark(b.id)} className="text-white/30 hover:text-red-400 text-sm px-1" aria-label="刪除書籤">✕</button>
                     </div>
                   </div>
                 ) : (
                   <div className="flex items-start gap-3">
-                    {faviconUrl(b.url) && <img src={faviconUrl(b.url)} alt="" className="w-6 h-6 rounded-md mt-0.5" />}
+                    {faviconUrl(b.url) && <img src={faviconUrl(b.url)} alt="" className="w-6 h-6 rounded-md mt-0.5 bg-white" />}
                     <div className="flex-1 min-w-0">
-                      <a href={b.url} target="_blank" rel="noreferrer" className="font-semibold leading-snug block truncate">{b.title}</a>
-                      <a href={b.url} target="_blank" rel="noreferrer" className="text-xs text-brand block truncate mt-0.5">{b.url}</a>
-                      {b.note && <p className="text-sm text-ink/60 mt-1.5 whitespace-pre-wrap">{b.note}</p>}
+                      <a href={b.url} target="_blank" rel="noreferrer" className="font-semibold leading-snug block truncate text-white">{b.title}</a>
+                      <a href={b.url} target="_blank" rel="noreferrer" className="text-xs block truncate mt-0.5" style={{ color: '#A78BFA' }}>{b.url}</a>
+                      {b.note && <p className="text-sm text-white/60 mt-1.5 whitespace-pre-wrap">{b.note}</p>}
                       <div className="mt-2 flex items-center gap-2">
                         <span className="text-[11px] px-2 py-0.5 rounded-full text-white" style={{ backgroundColor: categoryColor(b.categoryId) }}>
                           {categoryName(b.categoryId)}
                         </span>
                       </div>
                     </div>
-                    <button onClick={() => handleDeleteBookmark(b.id)} className="text-ink/30 hover:text-red-500 text-sm px-1" aria-label="刪除書籤">✕</button>
+                    <button onClick={() => handleDeleteBookmark(b.id)} className="text-white/30 hover:text-red-400 text-sm px-1" aria-label="刪除書籤">✕</button>
                   </div>
                 )}
               </div>
@@ -661,12 +689,12 @@ export default function App() {
 
       {/* 儲存書籤視窗（同時是 ?url= 帶入與圖片上傳時的分類選擇視窗） */}
       {saveModal && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center" onClick={() => { if (!saving) closeSaveModal() }}>
-          <div className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl p-5 pb-7 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center" onClick={() => { if (!saving) closeSaveModal() }}>
+          <div className="bg-card border border-white/10 w-full max-w-lg rounded-t-3xl sm:rounded-3xl p-5 pb-7 max-h-[90vh] overflow-y-auto text-white" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-bold text-lg">{saveModal.type === 'image' ? '收藏圖片' : '收藏書籤'}</h3>
               {saveModal.analyzing && (
-                <span className="text-xs text-brand bg-brand/10 px-2.5 py-1 rounded-full">✨ AI 辨識中…</span>
+                <span className="text-xs text-[#A78BFA] bg-brand/20 px-2.5 py-1 rounded-full">✨ AI 辨識中…</span>
               )}
             </div>
             {saveModal.type === 'image' ? (
@@ -674,50 +702,50 @@ export default function App() {
                 <img
                   src={saveModal.imagePreviewUrl}
                   alt="圖片預覽"
-                  className="w-full max-h-48 object-contain rounded-2xl bg-paper"
+                  className="w-full max-h-48 object-contain rounded-2xl bg-paper border border-white/10"
                 />
               </div>
             ) : (
               <>
-                <label className="block text-xs text-ink/50 mb-1">網址</label>
+                <label className="block text-xs text-white/45 mb-1">網址</label>
                 <input
                   value={saveModal.url}
                   onChange={(e) => setSaveModal({ ...saveModal, url: e.target.value })}
-                  className="w-full bg-paper rounded-2xl px-4 py-3 text-sm outline-none mb-3"
+                  className="w-full bg-paper border border-white/10 rounded-2xl px-4 py-3 text-sm outline-none mb-3 text-white"
                   inputMode="url"
                 />
               </>
             )}
-            <label className="block text-xs text-ink/50 mb-1">標題</label>
+            <label className="block text-xs text-white/45 mb-1">標題</label>
             <input
               value={saveModal.title}
               onChange={(e) => setSaveModal({ ...saveModal, title: e.target.value, titleEdited: true })}
-              className="w-full bg-paper rounded-2xl px-4 py-3 text-sm outline-none mb-3"
+              className="w-full bg-paper border border-white/10 rounded-2xl px-4 py-3 text-sm outline-none mb-3 text-white placeholder:text-white/35"
               placeholder="幫這則書籤取個名字"
             />
-            <label className="block text-xs text-ink/50 mb-1">備註</label>
+            <label className="block text-xs text-white/45 mb-1">備註</label>
             <textarea
               value={saveModal.note}
               onChange={(e) => setSaveModal({ ...saveModal, note: e.target.value, noteEdited: true })}
-              className="w-full bg-paper rounded-2xl px-4 py-3 text-sm outline-none mb-4 resize-none"
+              className="w-full bg-paper border border-white/10 rounded-2xl px-4 py-3 text-sm outline-none mb-4 resize-none text-white placeholder:text-white/35"
               rows={3}
               placeholder="為什麼存這則？（可留空）"
             />
-            <label className="block text-xs text-ink/50 mb-2">選擇分類</label>
+            <label className="block text-xs text-white/45 mb-2">選擇分類</label>
             <div className="flex flex-wrap gap-2 mb-5">
               {categories.map((cat) => (
                 <button
                   key={cat.id}
                   onClick={() => setSaveModal({ ...saveModal, categoryId: cat.id })}
-                  className={`px-4 py-2 rounded-full text-sm font-medium transition ${saveModal.categoryId === cat.id ? 'text-white' : 'bg-paper text-ink'}`}
-                  style={saveModal.categoryId === cat.id ? { backgroundColor: cat.color || '#1F6FEB' } : {}}
+                  className={`px-4 py-2 rounded-full text-sm font-medium transition ${saveModal.categoryId === cat.id ? 'text-white' : 'bg-white/5 border border-white/10 text-white/80'}`}
+                  style={saveModal.categoryId === cat.id ? { backgroundColor: cat.color || '#8B5CF6' } : {}}
                 >
                   {cat.name}
                 </button>
               ))}
               <button
                 onClick={() => setSaveModal({ ...saveModal, categoryId: '' })}
-                className={`px-4 py-2 rounded-full text-sm font-medium transition ${saveModal.categoryId === '' ? 'bg-ink text-white' : 'bg-paper text-ink'}`}
+                className={`px-4 py-2 rounded-full text-sm font-medium transition ${saveModal.categoryId === '' ? 'bg-white text-[#1A1A1A]' : 'bg-white/5 border border-white/10 text-white/80'}`}
               >
                 未分類
               </button>
@@ -726,7 +754,7 @@ export default function App() {
               <button
                 disabled={saving}
                 onClick={closeSaveModal}
-                className="flex-1 py-3 rounded-2xl bg-paper font-medium active:scale-[0.98] transition disabled:opacity-50"
+                className="flex-1 py-3 rounded-2xl bg-white/5 border border-white/10 font-medium active:scale-[0.98] transition disabled:opacity-50"
               >
                 取消
               </button>
@@ -744,19 +772,19 @@ export default function App() {
 
       {/* 新增分類視窗 */}
       {categoryModal && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center" onClick={() => setCategoryModal(false)}>
-          <div className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl p-5 pb-7" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center" onClick={() => setCategoryModal(false)}>
+          <div className="bg-card border border-white/10 w-full max-w-lg rounded-t-3xl sm:rounded-3xl p-5 pb-7 text-white" onClick={(e) => e.stopPropagation()}>
             <h3 className="font-bold text-lg mb-4">新增分類</h3>
             <input
               value={newCategoryName}
               onChange={(e) => setNewCategoryName(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') handleAddCategory() }}
               placeholder="分類名稱，例如：投資理財"
-              className="w-full bg-paper rounded-2xl px-4 py-3 text-sm outline-none mb-4"
+              className="w-full bg-paper border border-white/10 rounded-2xl px-4 py-3 text-sm outline-none mb-4 text-white placeholder:text-white/35"
               autoFocus
             />
             <div className="flex gap-2">
-              <button onClick={() => setCategoryModal(false)} className="flex-1 py-3 rounded-2xl bg-paper font-medium active:scale-[0.98] transition">取消</button>
+              <button onClick={() => setCategoryModal(false)} className="flex-1 py-3 rounded-2xl bg-white/5 border border-white/10 font-medium active:scale-[0.98] transition">取消</button>
               <button onClick={handleAddCategory} className="flex-1 py-3 rounded-2xl bg-brand text-white font-semibold active:scale-[0.98] transition">建立</button>
             </div>
           </div>
@@ -765,7 +793,7 @@ export default function App() {
 
       {/* Toast */}
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-ink text-white text-sm px-5 py-2.5 rounded-full shadow-card z-[60]">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-white text-[#1A1A1A] text-sm font-medium px-5 py-2.5 rounded-full shadow-card z-[60]">
           {toast}
         </div>
       )}
