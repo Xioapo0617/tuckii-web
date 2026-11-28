@@ -16,6 +16,7 @@ import {
   query,
   serverTimestamp,
   setDoc,
+  updateDoc,
   writeBatch
 } from 'firebase/firestore'
 import { auth, db, googleProvider } from './firebase'
@@ -23,6 +24,16 @@ import { compressImageToWebP } from './utils/image'
 
 const DEFAULT_CATEGORIES = ['口袋名單', '靈感', '學習筆記', '旅行計畫']
 const CATEGORY_COLORS = ['#8B5CF6', '#F59E0B', '#10B981', '#EC4899', '#38BDF8', '#F97316', '#14B8A6', '#6366F1']
+
+const SHORTCUT_ICLOUD_URL = 'https://www.icloud.com/shortcuts/1884f0178a214c45aef321d86dce1462'
+const ONBOARDING_KEY = 'tuckii_onboarding_done_v1'
+
+const TABS = [
+  { key: 'home', label: '收藏', icon: '🔖' },
+  { key: 'categories', label: '分類', icon: '🗂️' },
+  { key: 'notes', label: '筆記', icon: '📝' },
+  { key: 'profile', label: '個人', icon: '👤' }
+]
 
 function normalizeUrl(raw) {
   const trimmed = (raw || '').trim()
@@ -55,15 +66,19 @@ export default function App() {
   const [bookmarks, setBookmarks] = useState([])
   const [dataReady, setDataReady] = useState(false)
 
+  const [tab, setTab] = useState('home')
   const [urlInput, setUrlInput] = useState('')
   const [keyword, setKeyword] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('all') // 'all' | categoryId | 'uncategorized'
 
   const [saveModal, setSaveModal] = useState(null) // { type: 'url'|'image', url?, title, note, categoryId, imageBlob?, imageMimeType?, imagePreviewUrl?, analyzing?, titleEdited?, noteEdited? }
   const [saving, setSaving] = useState(false)
+  const [pickerBookmark, setPickerBookmark] = useState(null) // 正在改分類的書籤
+  const [noteModal, setNoteModal] = useState(null) // { id, title, text }
   const [categoryModal, setCategoryModal] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
   const [toast, setToast] = useState('')
+  const [guideStep, setGuideStep] = useState(null) // null = 關閉；0~3 = 新手引導步驟
 
   const pendingUrlRef = useRef(null)
   const urlInputRef = useRef(null)
@@ -76,10 +91,37 @@ export default function App() {
     window.setTimeout(() => setToast(''), 2200)
   }
 
-  // ---- 讀取 ?url=... 參數（iPhone 捷徑用）----
+  // ---- 首次使用：自動跳出新手引導（看過後記錄在 localStorage，不再自動跳）----
+  useEffect(() => {
+    if (loading) return
+    try {
+      if (!window.localStorage.getItem(ONBOARDING_KEY)) setGuideStep(0)
+    } catch {
+      // localStorage 不可用時就不自動跳
+    }
+  }, [loading])
+
+  const closeGuide = () => {
+    try {
+      window.localStorage.setItem(ONBOARDING_KEY, '1')
+    } catch {
+      // 忽略寫入失敗
+    }
+    setGuideStep(null)
+  }
+
+  const openGuide = () => setGuideStep(0)
+
+  // ---- 讀取 ?url=... 或 Share Target 參數（iPhone 捷徑用）----
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    const incoming = params.get('url')
+    const rawUrl = params.get('url')
+    const rawText = params.get('text')
+    let incoming = rawUrl
+    if (!incoming && rawText) {
+      const match = rawText.match(/https?:\/\/\S+/i)
+      incoming = match ? match[0] : rawText
+    }
     if (incoming) {
       pendingUrlRef.current = incoming
       window.history.replaceState({}, '', window.location.pathname)
@@ -396,6 +438,25 @@ export default function App() {
     }
   }
 
+  const handleChangeCategory = async (bookmark, newCategoryId) => {
+    if (!user) return
+    setPickerBookmark(null)
+    if ((bookmark.categoryId || '') === (newCategoryId || '')) return
+    await updateDoc(doc(db, 'users', user.uid, 'bookmarks', bookmark.id), {
+      categoryId: newCategoryId || ''
+    })
+    showToast('分類已更新')
+  }
+
+  const handleSaveNote = async () => {
+    if (!user || !noteModal) return
+    await updateDoc(doc(db, 'users', user.uid, 'bookmarks', noteModal.id), {
+      note: noteModal.text.trim()
+    })
+    setNoteModal(null)
+    showToast('筆記已儲存')
+  }
+
   const handleDeleteBookmark = async (id) => {
     if (!user) return
     if (!window.confirm('刪除這則書籤？')) return
@@ -452,8 +513,133 @@ export default function App() {
     })
   }, [bookmarks, keyword, selectedCategory])
 
+  const notedBookmarks = useMemo(() => bookmarks.filter((b) => (b.note || '').trim()), [bookmarks])
+  const unnotedBookmarks = useMemo(() => bookmarks.filter((b) => !(b.note || '').trim()), [bookmarks])
+
   const categoryName = (id) => categories.find((c) => c.id === id)?.name || '未分類'
   const categoryColor = (id) => categories.find((c) => c.id === id)?.color || '#6B7280'
+
+  const renderBookmarkCard = (b) => (
+    <div key={b.id} className="bg-card border border-white/10 rounded-3xl shadow-card p-4">
+      {b.type === 'image' && b.imageUrl ? (
+        <div>
+          <a href={b.imageUrl} target="_blank" rel="noreferrer" className="block mb-3">
+            <img
+              src={b.imageUrl}
+              alt={b.title || '圖片書籤'}
+              loading="lazy"
+              className="w-full max-h-64 object-cover rounded-2xl bg-paper border border-white/5"
+            />
+          </a>
+          <div className="flex items-start gap-3">
+            <div className="flex-1 min-w-0">
+              <a href={b.imageUrl} target="_blank" rel="noreferrer" className="font-semibold leading-snug block truncate text-white">{b.title || '圖片書籤'}</a>
+              {b.note && <p className="text-sm text-white/60 mt-1.5 whitespace-pre-wrap">{b.note}</p>}
+              <div className="mt-2 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setPickerBookmark(b) }}
+                  className="text-[11px] px-2.5 py-0.5 rounded-full text-white active:scale-95 transition"
+                  style={{ backgroundColor: categoryColor(b.categoryId) }}
+                  aria-label={`修改分類，目前是 ${categoryName(b.categoryId)}`}
+                >
+                  {categoryName(b.categoryId)} ▾
+                </button>
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-white/10 text-white/70">🖼️ 圖片</span>
+              </div>
+            </div>
+            <button onClick={() => handleDeleteBookmark(b.id)} className="text-white/30 hover:text-red-400 text-sm px-1" aria-label="刪除書籤">✕</button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-start gap-3">
+          {faviconUrl(b.url) && <img src={faviconUrl(b.url)} alt="" className="w-6 h-6 rounded-md mt-0.5 bg-white" />}
+          <div className="flex-1 min-w-0">
+            <a href={b.url} target="_blank" rel="noreferrer" className="font-semibold leading-snug block truncate text-white">{b.title}</a>
+            <a href={b.url} target="_blank" rel="noreferrer" className="text-xs block truncate mt-0.5" style={{ color: '#A78BFA' }}>{b.url}</a>
+            {b.note && <p className="text-sm text-white/60 mt-1.5 whitespace-pre-wrap">{b.note}</p>}
+            <div className="mt-2 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setPickerBookmark(b) }}
+                className="text-[11px] px-2.5 py-0.5 rounded-full text-white active:scale-95 transition"
+                style={{ backgroundColor: categoryColor(b.categoryId) }}
+                aria-label={`修改分類，目前是 ${categoryName(b.categoryId)}`}
+              >
+                {categoryName(b.categoryId)} ▾
+              </button>
+            </div>
+          </div>
+          <button onClick={() => handleDeleteBookmark(b.id)} className="text-white/30 hover:text-red-400 text-sm px-1" aria-label="刪除書籤">✕</button>
+        </div>
+      )}
+    </div>
+  )
+
+  function renderGuide() {
+    const steps = [
+      {
+        icon: '📥',
+        title: '看到想留的，先分享或複製',
+        body: '在 IG、Threads、FB、抖音、Spotify 看到想留的內容，按「分享」選「Tuckii 書籤」，或複製連結回來貼上，就能存進來。'
+      },
+      {
+        icon: '⚡',
+        title: '裝好捷徑，分享直接存',
+        body: '裝好後在貼文按分享 → 往下滑選「Tuckii 書籤」，就會自動帶著連結打開這裡選分類。',
+        action: (
+          <a
+            href={SHORTCUT_ICLOUD_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="block w-full text-center bg-brand text-white font-semibold py-3 rounded-2xl active:scale-[0.98] transition"
+          >
+            一鍵加入「Tuckii 書籤」捷徑
+          </a>
+        )
+      },
+      {
+        icon: '🔍',
+        title: '存進來之後，找得到、用得順',
+        body: '用關鍵字搜尋標題、網址或筆記；點書籤上的分類膠囊可以一鍵換分類；也能替每則書籤寫筆記，之後在「筆記」分頁慢慢回顧。'
+      },
+      {
+        icon: '☁️',
+        title: '登入同步，加入主畫面',
+        body: '登入 Google 帳號後，書籤會同步到 Firestore，換裝置也看得到。再把這個網頁「加入主畫面」，就能像 App 一樣全螢幕使用。'
+      }
+    ]
+    const step = steps[guideStep]
+    const isLast = guideStep === steps.length - 1
+    return (
+      <div className="fixed inset-0 bg-black/70 z-[70] flex items-end sm:items-center justify-center" onClick={closeGuide}>
+        <div className="bg-card border border-white/10 w-full max-w-lg rounded-t-3xl sm:rounded-3xl p-6 pb-8 text-white" onClick={(e) => e.stopPropagation()}>
+          <div className="text-4xl mb-3">{step.icon}</div>
+          <h3 className="font-bold text-xl mb-2">{step.title}</h3>
+          <p className="text-sm text-white/65 leading-relaxed mb-4">{step.body}</p>
+          {step.action}
+          <div className="flex items-center justify-center gap-1.5 my-5">
+            {steps.map((_, i) => (
+              <span key={i} className={`h-1.5 rounded-full transition-all ${i === guideStep ? 'w-6 bg-brand' : 'w-1.5 bg-white/20'}`} />
+            ))}
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={closeGuide} className="px-4 py-3 text-sm text-white/50 font-medium">跳過</button>
+            <div className="flex-1" />
+            {guideStep > 0 && (
+              <button onClick={() => setGuideStep(guideStep - 1)} className="px-5 py-3 rounded-2xl bg-white/5 border border-white/10 font-medium active:scale-[0.98] transition">上一步</button>
+            )}
+            {isLast ? (
+              <button onClick={closeGuide} className="px-6 py-3 rounded-2xl bg-brand text-white font-semibold active:scale-[0.98] transition">開始使用</button>
+            ) : (
+              <button onClick={() => setGuideStep(guideStep + 1)} className="px-6 py-3 rounded-2xl bg-brand text-white font-semibold active:scale-[0.98] transition">下一步</button>
+            )}
+          </div>
+          <p className="text-center text-[11px] text-white/35 mt-4">第 {guideStep + 1} 步，共 {steps.length} 步</p>
+        </div>
+      </div>
+    )
+  }
 
   // ---------- 畫面 ----------
 
@@ -479,13 +665,20 @@ export default function App() {
         >
           使用 Google 帳號登入
         </button>
+        <button
+          onClick={openGuide}
+          className="mt-4 text-xs text-white/45 hover:text-white/80 transition"
+        >
+          📖 使用教學與 iOS 捷徑設定
+        </button>
+        {guideStep !== null && renderGuide()}
       </div>
     )
   }
 
   return (
     <div className="min-h-screen bg-paper text-white">
-      <div className="max-w-lg mx-auto px-4 pb-24">
+      <div className="max-w-lg mx-auto px-4 pb-32">
         {/* 頂部列 */}
         <header className="flex items-center justify-between pt-5 pb-3">
           <div className="flex items-center gap-2">
@@ -494,203 +687,279 @@ export default function App() {
             </div>
             <span className="font-bold text-lg text-white">Tuckii 書籤</span>
           </div>
-          <div className="flex items-center gap-2">
-            {user.photoURL && <img src={user.photoURL} alt="" className="w-8 h-8 rounded-full border border-white/10" />}
-            <button onClick={() => signOut(auth)} className="text-sm text-white/50 hover:text-white px-2 py-1 transition">登出</button>
-          </div>
+          <span className="text-xs text-white/40">
+            {tab === 'home' && '收藏'}
+            {tab === 'categories' && '分類'}
+            {tab === 'notes' && '筆記'}
+            {tab === 'profile' && '個人'}
+          </span>
         </header>
 
-        {/* 一鍵貼上並儲存 */}
-        <div className="bg-card border border-white/10 rounded-3xl shadow-card p-3 mb-3">
-          <div className="flex gap-2">
-            <input
-              ref={urlInputRef}
-              value={urlInput}
-              onChange={(e) => setUrlInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && urlInput.trim()) openSaveModal(urlInput) }}
-              placeholder="貼上網址…"
-              inputMode="url"
-              className="flex-1 min-w-0 bg-paper border border-white/10 rounded-2xl px-4 py-3 text-sm outline-none placeholder:text-white/35 text-white"
-            />
-            <button
-              onClick={() => { if (urlInput.trim()) openSaveModal(urlInput) }}
-              className="shrink-0 bg-white/10 border border-white/10 text-white text-sm font-medium px-4 rounded-2xl active:scale-95 transition"
-            >
-              儲存
-            </button>
-          </div>
-          <div className="grid grid-cols-2 gap-2 mt-2">
-            <button
-              onClick={handlePasteAndSave}
-              className="bg-brand text-white font-semibold py-3 rounded-2xl active:scale-[0.98] transition text-sm"
-            >
-              📋 一鍵貼上網址
-            </button>
-            <button
-              onClick={() => imageInputRef.current?.click()}
-              className="bg-white/5 border border-white/10 text-white font-semibold py-3 rounded-2xl active:scale-[0.98] transition text-sm"
-            >
-              🖼️ 上傳圖片 / 截圖
-            </button>
-          </div>
-          <input
-            ref={imageInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0]
-              if (file) handleImageSelected(file)
-              e.target.value = ''
-            }}
-          />
-          <p className="text-[11px] text-white/35 text-center mt-2">支援直接按 Ctrl+V 貼上剪貼簿圖片</p>
-        </div>
+        {/* ===== 分頁：收藏 ===== */}
+        {tab === 'home' && (
+          <>
+            {/* 一鍵貼上並儲存 */}
+            <div className="bg-card border border-white/10 rounded-3xl shadow-card p-3 mb-3">
+              <div className="flex gap-2">
+                <input
+                  ref={urlInputRef}
+                  value={urlInput}
+                  onChange={(e) => setUrlInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && urlInput.trim()) openSaveModal(urlInput) }}
+                  placeholder="貼上網址…"
+                  inputMode="url"
+                  className="flex-1 min-w-0 bg-paper border border-white/10 rounded-2xl px-4 py-3 text-sm outline-none placeholder:text-white/35 text-white"
+                />
+                <button
+                  onClick={() => { if (urlInput.trim()) openSaveModal(urlInput) }}
+                  className="shrink-0 bg-white/10 border border-white/10 text-white text-sm font-medium px-4 rounded-2xl active:scale-95 transition"
+                >
+                  儲存
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                <button
+                  onClick={handlePasteAndSave}
+                  className="bg-brand text-white font-semibold py-3 rounded-2xl active:scale-[0.98] transition text-sm"
+                >
+                  📋 一鍵貼上網址
+                </button>
+                <button
+                  onClick={() => imageInputRef.current?.click()}
+                  className="bg-white/5 border border-white/10 text-white font-semibold py-3 rounded-2xl active:scale-[0.98] transition text-sm"
+                >
+                  🖼️ 上傳圖片 / 截圖
+                </button>
+              </div>
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) handleImageSelected(file)
+                  e.target.value = ''
+                }}
+              />
+              <p className="text-[11px] text-white/35 text-center mt-2">支援直接按 Ctrl+V 貼上剪貼簿圖片</p>
+            </div>
 
-        {/* 搜尋 */}
-        <div className="bg-card border border-white/10 rounded-full shadow-card px-4 py-2.5 mb-3 flex items-center gap-2">
-          <span className="text-white/40">🔍</span>
-          <input
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-            placeholder="搜尋標題、網址或備註…"
-            className="flex-1 min-w-0 bg-transparent text-sm outline-none placeholder:text-white/35 text-white"
-          />
-          {keyword && (
-            <button onClick={() => setKeyword('')} className="text-white/40 text-sm px-1">✕</button>
-          )}
-        </div>
+            {/* 搜尋 */}
+            <div className="bg-card border border-white/10 rounded-full shadow-card px-4 py-2.5 mb-3 flex items-center gap-2">
+              <span className="text-white/40">🔍</span>
+              <input
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
+                placeholder="搜尋標題、網址或備註…"
+                className="flex-1 min-w-0 bg-transparent text-sm outline-none placeholder:text-white/35 text-white"
+              />
+              {keyword && (
+                <button onClick={() => setKeyword('')} className="text-white/40 text-sm px-1">✕</button>
+              )}
+            </div>
 
-        {/* 分類快速篩選 */}
-        <div className="flex gap-2 overflow-x-auto no-scrollbar mb-4 -mx-4 px-4">
-          <button
-            onClick={() => setSelectedCategory('all')}
-            className={`shrink-0 px-4 py-2 rounded-full text-sm font-medium transition ${selectedCategory === 'all' ? 'bg-brand text-white' : 'bg-card border border-white/10 text-white/70'}`}
-          >
-            全部
-          </button>
-          {categories.map((cat) => (
-            <button
-              key={cat.id}
-              onClick={() => setSelectedCategory(cat.id)}
-              className={`shrink-0 px-4 py-2 rounded-full text-sm font-medium transition ${selectedCategory === cat.id ? 'text-white' : 'bg-card border border-white/10 text-white/70'}`}
-              style={selectedCategory === cat.id ? { backgroundColor: cat.color || '#8B5CF6' } : {}}
-            >
-              {cat.name}
-            </button>
-          ))}
-          {(countByCategory['uncategorized'] || 0) > 0 && (
-            <button
-              onClick={() => setSelectedCategory('uncategorized')}
-              className={`shrink-0 px-4 py-2 rounded-full text-sm font-medium transition ${selectedCategory === 'uncategorized' ? 'bg-brand text-white' : 'bg-card border border-white/10 text-white/70'}`}
-            >
-              未分類
-            </button>
-          )}
-        </div>
-
-        {/* 分類資料夾卡片 */}
-        <div className="flex items-center justify-between mb-2 px-1">
-          <h2 className="font-semibold text-sm text-white/60">我的分類</h2>
-          <button onClick={() => setCategoryModal(true)} className="text-sm font-medium" style={{ color: '#A78BFA' }}>＋ 新增分類</button>
-        </div>
-        <div className="grid grid-cols-2 gap-3 mb-5">
-          <button
-            onClick={() => setSelectedCategory('all')}
-            className={`text-left bg-card border border-white/10 rounded-3xl shadow-card p-4 active:scale-[0.98] transition ${selectedCategory === 'all' ? 'ring-2 ring-brand' : ''}`}
-          >
-            <div className="text-2xl mb-1">🗂️</div>
-            <div className="font-semibold text-white">全部書籤</div>
-            <div className="text-xs text-white/45">{bookmarks.length} 則</div>
-          </button>
-          {categories.map((cat) => (
-            <div
-              key={cat.id}
-              onClick={() => setSelectedCategory(cat.id)}
-              className={`relative text-left bg-card border border-white/10 rounded-3xl shadow-card p-4 cursor-pointer active:scale-[0.98] transition ${selectedCategory === cat.id ? 'ring-2 ring-brand' : ''}`}
-            >
-              <div className="w-8 h-8 rounded-xl mb-1 flex items-center justify-center text-lg" style={{ backgroundColor: (cat.color || '#8B5CF6') + '2E' }}>📁</div>
-              <div className="font-semibold text-white pr-5">{cat.name}</div>
-              <div className="text-xs text-white/45">{countByCategory[cat.id] || 0} 則</div>
+            {/* 分類快速篩選 */}
+            <div className="flex gap-2 overflow-x-auto no-scrollbar mb-4 -mx-4 px-4">
               <button
-                onClick={(e) => { e.stopPropagation(); handleDeleteCategory(cat) }}
-                className="absolute top-3 right-3 text-white/30 hover:text-red-400 text-sm px-1"
-                aria-label={`刪除分類 ${cat.name}`}
+                onClick={() => setSelectedCategory('all')}
+                className={`shrink-0 px-4 py-2 rounded-full text-sm font-medium transition ${selectedCategory === 'all' ? 'bg-brand text-white' : 'bg-card border border-white/10 text-white/70'}`}
               >
-                ✕
+                全部
+              </button>
+              {categories.map((cat) => (
+                <button
+                  key={cat.id}
+                  onClick={() => setSelectedCategory(cat.id)}
+                  className={`shrink-0 px-4 py-2 rounded-full text-sm font-medium transition ${selectedCategory === cat.id ? 'text-white' : 'bg-card border border-white/10 text-white/70'}`}
+                  style={selectedCategory === cat.id ? { backgroundColor: cat.color || '#8B5CF6' } : {}}
+                >
+                  {cat.name}
+                </button>
+              ))}
+              {(countByCategory['uncategorized'] || 0) > 0 && (
+                <button
+                  onClick={() => setSelectedCategory('uncategorized')}
+                  className={`shrink-0 px-4 py-2 rounded-full text-sm font-medium transition ${selectedCategory === 'uncategorized' ? 'bg-brand text-white' : 'bg-card border border-white/10 text-white/70'}`}
+                >
+                  未分類
+                </button>
+              )}
+            </div>
+
+            {/* 書籤清單 */}
+            <h2 className="font-semibold text-sm text-white/60 mb-2 px-1">
+              {selectedCategory === 'all' ? '全部書籤' : selectedCategory === 'uncategorized' ? '未分類' : categoryName(selectedCategory)}
+              <span className="text-white/35 font-normal"> ・ {visibleBookmarks.length} 則</span>
+            </h2>
+            {visibleBookmarks.length === 0 ? (
+              <div className="bg-card border border-white/10 rounded-3xl shadow-card p-8 text-center text-white/40 text-sm">
+                {keyword ? '沒有符合搜尋的書籤' : '還沒有書籤，貼上網址收藏第一則吧'}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {visibleBookmarks.map(renderBookmarkCard)}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ===== 分頁：分類 ===== */}
+        {tab === 'categories' && (
+          <>
+            <div className="flex items-center justify-between mb-3 px-1">
+              <h2 className="font-semibold text-sm text-white/60">我的分類</h2>
+              <button onClick={() => setCategoryModal(true)} className="text-sm font-medium" style={{ color: '#A78BFA' }}>＋ 新增分類</button>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => { setSelectedCategory('all'); setTab('home') }}
+                className="text-left bg-card border border-white/10 rounded-3xl shadow-card p-4 active:scale-[0.98] transition"
+              >
+                <div className="text-2xl mb-1">🗂️</div>
+                <div className="font-semibold text-white">全部書籤</div>
+                <div className="text-xs text-white/45">{bookmarks.length} 則</div>
+              </button>
+              {categories.map((cat) => (
+                <div
+                  key={cat.id}
+                  onClick={() => { setSelectedCategory(cat.id); setTab('home') }}
+                  className="relative text-left bg-card border border-white/10 rounded-3xl shadow-card p-4 cursor-pointer active:scale-[0.98] transition"
+                >
+                  <div className="w-8 h-8 rounded-xl mb-1 flex items-center justify-center text-lg" style={{ backgroundColor: (cat.color || '#8B5CF6') + '2E' }}>📁</div>
+                  <div className="font-semibold text-white pr-5">{cat.name}</div>
+                  <div className="text-xs text-white/45">{countByCategory[cat.id] || 0} 則</div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleDeleteCategory(cat) }}
+                    className="absolute top-3 right-3 text-white/30 hover:text-red-400 text-sm px-1"
+                    aria-label={`刪除分類 ${cat.name}`}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+              {(countByCategory['uncategorized'] || 0) > 0 && (
+                <button
+                  onClick={() => { setSelectedCategory('uncategorized'); setTab('home') }}
+                  className="text-left bg-card border border-white/10 rounded-3xl shadow-card p-4 active:scale-[0.98] transition"
+                >
+                  <div className="text-2xl mb-1">📥</div>
+                  <div className="font-semibold text-white">未分類</div>
+                  <div className="text-xs text-white/45">{countByCategory['uncategorized']} 則</div>
+                </button>
+              )}
+            </div>
+            <p className="text-xs text-white/35 mt-4 px-1">點分類卡片會跳到「收藏」分頁並只顯示該分類的書籤。</p>
+          </>
+        )}
+
+        {/* ===== 分頁：筆記 ===== */}
+        {tab === 'notes' && (
+          <>
+            <h2 className="font-semibold text-sm text-white/60 mb-3 px-1">有寫筆記的書籤 ・ {notedBookmarks.length} 則</h2>
+            {notedBookmarks.length === 0 ? (
+              <div className="bg-card border border-white/10 rounded-3xl shadow-card p-8 text-center text-white/40 text-sm mb-5">
+                還沒有任何筆記，從下方挑一則書籤寫下第一則筆記吧
+              </div>
+            ) : (
+              <div className="space-y-3 mb-6">
+                {notedBookmarks.map((b) => (
+                  <div key={b.id} className="bg-card border border-white/10 rounded-3xl shadow-card p-4">
+                    <a href={b.type === 'image' ? b.imageUrl : b.url} target="_blank" rel="noreferrer" className="font-semibold leading-snug block truncate text-white">{b.title || '圖片書籤'}</a>
+                    <p className="text-sm text-white/65 mt-1.5 whitespace-pre-wrap leading-relaxed">{b.note}</p>
+                    <div className="mt-3 flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setPickerBookmark(b)}
+                        className="text-[11px] px-2.5 py-0.5 rounded-full text-white active:scale-95 transition"
+                        style={{ backgroundColor: categoryColor(b.categoryId) }}
+                      >
+                        {categoryName(b.categoryId)} ▾
+                      </button>
+                      <button
+                        onClick={() => setNoteModal({ id: b.id, title: b.title || '圖片書籤', text: b.note || '' })}
+                        className="text-xs px-3 py-1 rounded-full bg-white/5 border border-white/10 text-white/80 active:scale-95 transition"
+                      >
+                        ✏️ 編輯筆記
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {unnotedBookmarks.length > 0 && (
+              <>
+                <h2 className="font-semibold text-sm text-white/60 mb-3 px-1">還沒寫筆記 ・ {unnotedBookmarks.length} 則</h2>
+                <div className="space-y-3">
+                  {unnotedBookmarks.map((b) => (
+                    <div key={b.id} className="bg-card border border-white/10 rounded-3xl shadow-card p-4 flex items-center gap-3">
+                      <div className="flex-1 min-w-0">
+                        <a href={b.type === 'image' ? b.imageUrl : b.url} target="_blank" rel="noreferrer" className="font-semibold leading-snug block truncate text-white">{b.title || '圖片書籤'}</a>
+                        <span className="text-[11px] px-2 py-0.5 rounded-full text-white inline-block mt-1.5" style={{ backgroundColor: categoryColor(b.categoryId) }}>{categoryName(b.categoryId)}</span>
+                      </div>
+                      <button
+                        onClick={() => setNoteModal({ id: b.id, title: b.title || '圖片書籤', text: '' })}
+                        className="shrink-0 text-xs px-3 py-2 rounded-full bg-brand text-white font-medium active:scale-95 transition"
+                      >
+                        ＋ 加筆記
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </>
+        )}
+
+        {/* ===== 分頁：個人 ===== */}
+        {tab === 'profile' && (
+          <>
+            <div className="bg-card border border-white/10 rounded-3xl shadow-card p-5 mb-3 flex items-center gap-4">
+              {user.photoURL
+                ? <img src={user.photoURL} alt="" className="w-14 h-14 rounded-full border border-white/10" />
+                : <div className="w-14 h-14 rounded-full bg-brand flex items-center justify-center text-2xl">👤</div>}
+              <div className="min-w-0">
+                <div className="font-bold text-lg truncate text-white">{user.displayName || '使用者'}</div>
+                <div className="text-sm text-white/50 truncate">{user.email}</div>
+                <div className="text-xs text-white/35 mt-0.5">書籤 {bookmarks.length} 則 ・ 分類 {categories.length} 個，同步於 Firestore</div>
+              </div>
+            </div>
+            <div className="bg-card border border-white/10 rounded-3xl shadow-card overflow-hidden mb-3">
+              <button onClick={openGuide} className="w-full flex items-center justify-between px-5 py-4 active:bg-white/5 transition text-left">
+                <span>📖 使用教學與 iOS 捷徑</span>
+                <span className="text-white/35">›</span>
+              </button>
+              <div className="h-px bg-white/10 mx-5" />
+              <button onClick={() => signOut(auth)} className="w-full flex items-center justify-between px-5 py-4 active:bg-white/5 transition text-left">
+                <span className="text-red-400">登出</span>
+                <span className="text-white/35">›</span>
               </button>
             </div>
-          ))}
-          {(countByCategory['uncategorized'] || 0) > 0 && (
-            <button
-              onClick={() => setSelectedCategory('uncategorized')}
-              className={`text-left bg-card border border-white/10 rounded-3xl shadow-card p-4 active:scale-[0.98] transition ${selectedCategory === 'uncategorized' ? 'ring-2 ring-brand' : ''}`}
-            >
-              <div className="text-2xl mb-1">📥</div>
-              <div className="font-semibold text-white">未分類</div>
-              <div className="text-xs text-white/45">{countByCategory['uncategorized']} 則</div>
-            </button>
-          )}
-        </div>
-
-        {/* 書籤清單 */}
-        <h2 className="font-semibold text-sm text-white/60 mb-2 px-1">
-          {selectedCategory === 'all' ? '全部書籤' : selectedCategory === 'uncategorized' ? '未分類' : categoryName(selectedCategory)}
-          <span className="text-white/35 font-normal"> ・ {visibleBookmarks.length} 則</span>
-        </h2>
-        {visibleBookmarks.length === 0 ? (
-          <div className="bg-card border border-white/10 rounded-3xl shadow-card p-8 text-center text-white/40 text-sm">
-            {keyword ? '沒有符合搜尋的書籤' : '還沒有書籤，貼上網址收藏第一則吧'}
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {visibleBookmarks.map((b) => (
-              <div key={b.id} className="bg-card border border-white/10 rounded-3xl shadow-card p-4">
-                {b.type === 'image' && b.imageUrl ? (
-                  <div>
-                    <a href={b.imageUrl} target="_blank" rel="noreferrer" className="block mb-3">
-                      <img
-                        src={b.imageUrl}
-                        alt={b.title || '圖片書籤'}
-                        loading="lazy"
-                        className="w-full max-h-64 object-cover rounded-2xl bg-paper border border-white/5"
-                      />
-                    </a>
-                    <div className="flex items-start gap-3">
-                      <div className="flex-1 min-w-0">
-                        <a href={b.imageUrl} target="_blank" rel="noreferrer" className="font-semibold leading-snug block truncate text-white">{b.title || '圖片書籤'}</a>
-                        {b.note && <p className="text-sm text-white/60 mt-1.5 whitespace-pre-wrap">{b.note}</p>}
-                        <div className="mt-2 flex items-center gap-2">
-                          <span className="text-[11px] px-2 py-0.5 rounded-full text-white" style={{ backgroundColor: categoryColor(b.categoryId) }}>
-                            {categoryName(b.categoryId)}
-                          </span>
-                          <span className="text-[11px] px-2 py-0.5 rounded-full bg-white/10 text-white/70">🖼️ 圖片</span>
-                        </div>
-                      </div>
-                      <button onClick={() => handleDeleteBookmark(b.id)} className="text-white/30 hover:text-red-400 text-sm px-1" aria-label="刪除書籤">✕</button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-start gap-3">
-                    {faviconUrl(b.url) && <img src={faviconUrl(b.url)} alt="" className="w-6 h-6 rounded-md mt-0.5 bg-white" />}
-                    <div className="flex-1 min-w-0">
-                      <a href={b.url} target="_blank" rel="noreferrer" className="font-semibold leading-snug block truncate text-white">{b.title}</a>
-                      <a href={b.url} target="_blank" rel="noreferrer" className="text-xs block truncate mt-0.5" style={{ color: '#A78BFA' }}>{b.url}</a>
-                      {b.note && <p className="text-sm text-white/60 mt-1.5 whitespace-pre-wrap">{b.note}</p>}
-                      <div className="mt-2 flex items-center gap-2">
-                        <span className="text-[11px] px-2 py-0.5 rounded-full text-white" style={{ backgroundColor: categoryColor(b.categoryId) }}>
-                          {categoryName(b.categoryId)}
-                        </span>
-                      </div>
-                    </div>
-                    <button onClick={() => handleDeleteBookmark(b.id)} className="text-white/30 hover:text-red-400 text-sm px-1" aria-label="刪除書籤">✕</button>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+          </>
         )}
       </div>
+
+      {/* 底部導覽列 */}
+      <nav className="fixed bottom-0 inset-x-0 z-40">
+        <div className="max-w-lg mx-auto bg-card/95 backdrop-blur border-t border-white/10 px-2 pt-2 pb-[max(env(safe-area-inset-bottom),0.5rem)]">
+          <div className="grid grid-cols-4">
+            {TABS.map((t) => {
+              const active = tab === t.key
+              return (
+                <button
+                  key={t.key}
+                  onClick={() => setTab(t.key)}
+                  className={`flex flex-col items-center gap-0.5 py-1.5 rounded-2xl active:scale-95 transition ${active ? '' : 'text-white/45'}`}
+                  style={active ? { color: '#8B5CF6' } : {}}
+                >
+                  <span className="text-xl leading-none">{t.icon}</span>
+                  <span className={`text-[11px] ${active ? 'font-semibold' : ''}`}>{t.label}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      </nav>
 
       {/* 儲存書籤視窗（同時是 ?url= 帶入與圖片上傳時的分類選擇視窗） */}
       {saveModal && (
@@ -775,6 +1044,67 @@ export default function App() {
         </div>
       )}
 
+      {/* 一鍵修改分類選單 */}
+      {pickerBookmark && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center" onClick={() => setPickerBookmark(null)}>
+          <div className="bg-card border border-white/10 w-full max-w-lg rounded-t-3xl sm:rounded-3xl p-5 pb-7 text-white" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-bold text-lg mb-1">修改分類</h3>
+            <p className="text-xs text-white/45 mb-4 truncate">{pickerBookmark.title || '圖片書籤'}</p>
+            <div className="space-y-1.5 max-h-72 overflow-y-auto">
+              {categories.map((cat) => {
+                const isCurrent = (pickerBookmark.categoryId || '') === cat.id
+                return (
+                  <button
+                    key={cat.id}
+                    onClick={() => handleChangeCategory(pickerBookmark, cat.id)}
+                    className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl text-sm font-medium transition active:scale-[0.98] ${isCurrent ? 'text-white' : 'bg-white/5 border border-white/10 text-white/85'}`}
+                    style={isCurrent ? { backgroundColor: cat.color || '#8B5CF6' } : {}}
+                  >
+                    <span>📁 {cat.name}</span>
+                    {isCurrent && <span className="text-xs">目前分類 ✓</span>}
+                  </button>
+                )
+              })}
+              {(() => {
+                const isCurrent = !(pickerBookmark.categoryId || '')
+                return (
+                  <button
+                    onClick={() => handleChangeCategory(pickerBookmark, '')}
+                    className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl text-sm font-medium transition active:scale-[0.98] ${isCurrent ? 'bg-white text-[#1A1A1A]' : 'bg-white/5 border border-white/10 text-white/85'}`}
+                  >
+                    <span>📥 未分類</span>
+                    {isCurrent && <span className="text-xs">目前分類 ✓</span>}
+                  </button>
+                )
+              })()}
+            </div>
+            <button onClick={() => setPickerBookmark(null)} className="w-full mt-4 py-3 rounded-2xl bg-white/5 border border-white/10 font-medium active:scale-[0.98] transition">取消</button>
+          </div>
+        </div>
+      )}
+
+      {/* 編輯筆記視窗 */}
+      {noteModal && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center" onClick={() => setNoteModal(null)}>
+          <div className="bg-card border border-white/10 w-full max-w-lg rounded-t-3xl sm:rounded-3xl p-5 pb-7 text-white" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-bold text-lg mb-1">筆記</h3>
+            <p className="text-xs text-white/45 mb-4 truncate">{noteModal.title}</p>
+            <textarea
+              value={noteModal.text}
+              onChange={(e) => setNoteModal({ ...noteModal, text: e.target.value })}
+              className="w-full bg-paper border border-white/10 rounded-2xl px-4 py-3 text-sm outline-none mb-4 resize-none text-white placeholder:text-white/35"
+              rows={4}
+              placeholder="寫下你的想法、重點或之後要做的事…"
+              autoFocus
+            />
+            <div className="flex gap-2">
+              <button onClick={() => setNoteModal(null)} className="flex-1 py-3 rounded-2xl bg-white/5 border border-white/10 font-medium active:scale-[0.98] transition">取消</button>
+              <button onClick={handleSaveNote} className="flex-1 py-3 rounded-2xl bg-brand text-white font-semibold active:scale-[0.98] transition">儲存筆記</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 新增分類視窗 */}
       {categoryModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center" onClick={() => setCategoryModal(false)}>
@@ -796,9 +1126,12 @@ export default function App() {
         </div>
       )}
 
-      {/* Toast */}
+      {/* 新手引導 */}
+      {guideStep !== null && renderGuide()}
+
+      {/* Toast（避開底部導覽列） */}
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-white text-[#1A1A1A] text-sm font-medium px-5 py-2.5 rounded-full shadow-card z-[60]">
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-white text-[#1A1A1A] text-sm font-medium px-5 py-2.5 rounded-full shadow-card z-[60]">
           {toast}
         </div>
       )}
