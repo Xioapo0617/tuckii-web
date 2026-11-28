@@ -25,7 +25,7 @@ import { compressImageToWebP } from './utils/image'
 const DEFAULT_CATEGORIES = ['口袋名單', '靈感', '學習筆記', '旅行計畫']
 const CATEGORY_COLORS = ['#8B5CF6', '#F59E0B', '#10B981', '#EC4899', '#38BDF8', '#F97316', '#14B8A6', '#6366F1']
 
-const SHORTCUT_ICLOUD_URL = 'https://www.icloud.com/shortcuts/1884f0178a214c45aef321d86dce1462'
+const SHORTCUT_ICLOUD_URL = 'https://www.icloud.com/shortcuts/3fdf6aedf73b4b1ea397ba9a8b5eb5b2'
 const ONBOARDING_KEY = 'tuckii_onboarding_done_v1'
 
 const TABS = [
